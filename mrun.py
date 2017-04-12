@@ -141,7 +141,7 @@ class HydraScheduler(mesos.interface.Scheduler):
 	lib.value = work_dir + "/libs"
 
         hydra_uri = task.command.uris.add()
-        hydra_uri.value = "file://" + nfs_path + "hydra/hydra.tgz"
+        hydra_uri.value = "file://" + nfs_path + "/hydra/hydra.tgz"
         executable_uri = task.command.uris.add()
         executable_uri.value = "file://" + nfs_path + "/hydra/" + mpi_program[0]
 
