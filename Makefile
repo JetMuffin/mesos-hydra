@@ -6,10 +6,10 @@ download_egg:
 	wget https://s3.amazonaws.com/downloads.mesosphere.io/master/ubuntu/13.10/mesos_0.16.0_amd64.egg
 
 upload: package example
-	hadoop fs -rm -f -r hdfs://$(HDFS_NAME_NODE)/hydra
-	hadoop fs -mkdir hdfs://$(HDFS_NAME_NODE)/hydra
-	hadoop fs -put hydra.tgz hdfs://$(HDFS_NAME_NODE)/hydra/hydra.tgz
-	hadoop fs -put hello_world hdfs://$(HDFS_NAME_NODE)/hydra/hello_world
+	rm -rf $(NFS_PATH)/hydra
+	mkdir -p $(NFS_PATH)/hydra
+	cp hydra.tgz $(NFS_PATH)/hydra/hydra.tgz
+	cp hello_world $(NFS_PATH)/hydra/hello_world
 
 package:
 	cd export && tar -cvzf ../hydra.tgz *

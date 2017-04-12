@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import mesos
-import mesos_pb2
+import mesos.native
+import mesos.interface
+from mesos.interface import mesos_pb2
 
 import os
 import logging
@@ -68,7 +69,7 @@ def finalizeSlaves(callbacks):
 
   logging.info("Done finalizing slaves")
 
-class HydraScheduler(mesos.Scheduler):
+class HydraScheduler(mesos.interface.Scheduler):
 
   def __init__(self, options):
     self.proxiesLaunched = 0
@@ -140,9 +141,9 @@ class HydraScheduler(mesos.Scheduler):
 	lib.value = work_dir + "/libs"
 
         hydra_uri = task.command.uris.add()
-        hydra_uri.value = "hdfs://" + name_node + "/hydra/hydra.tgz"
+        hydra_uri.value = "file://" + nfs_path + "hydra/hydra.tgz"
         executable_uri = task.command.uris.add()
-        executable_uri.value = "hdfs://" + name_node + "/hydra/" + mpi_program[0]
+        executable_uri.value = "file://" + nfs_path + "/hydra/" + mpi_program[0]
 
         task.command.value = "python hydra-proxy.py %d" % port
 
@@ -199,8 +200,8 @@ if __name__ == "__main__":
                     help="url to proxy binary", dest="proxy", type="string")
   parser.add_option("--name",
                     help="framework name", dest="name", type="string")
-  parser.add_option("--hdfs",
-                    help="HDFS Name node", dest="name_node", type="string")
+  parser.add_option("--nfs",
+                    help="NFS path", dest="nfs_path", type="string")
   parser.add_option("-p","--path",
                     help="path to look for MPICH2 binaries (mpiexec)",
                     dest="path", type="string", default="")
@@ -225,11 +226,11 @@ if __name__ == "__main__":
   mem_per_node = options.mem
   mpi_program = args[1:]
   
-  name_node = options.name_node
-  if name_node == None:
-    name_node = os.environ.get("HDFS_NAME_NODE")
-    if name_node == None:
-      print >> sys.stderr, "HDFS name node not found."
+  nfs_path = options.nfs_path
+  if nfs_path == None:
+    nfs_path = os.environ.get("NFS_PATH")
+    if nfs_path == None:
+      print >> sys.stderr, "NFS path required."
       exit(2)
 
   logging.info("Connecting to Mesos master %s" % args[0])
@@ -250,7 +251,7 @@ if __name__ == "__main__":
   
   work_dir = tempfile.mkdtemp()
 
-  driver = mesos.MesosSchedulerDriver(
+  driver = mesos.native.MesosSchedulerDriver(
     scheduler,
     framework,
     args[0])
