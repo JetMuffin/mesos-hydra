@@ -22,8 +22,7 @@ Then log into one of the master nodes and fetch the Hydra framework:
     $ sudo aptitude install python2.7-protobuf python-distribute make g++ build-essential gfortran libcr0 default-jdk
     $ wget http://www.cebacad.net/files/mpich/ubuntu/mpich-3.1rc2/mpich_3.1rc2-1ubuntu_amd64.deb
     $ sudo dpkg -i mpich_3.1rc2-1ubuntu_amd64.deb
-    $ export HDFS_NAME_NODE=<hdfs_name_node>
-    $ make download_egg
+    $ export NFS_PATH=<nfs_path>
     $ make
     $ ./mrun -N 3 -n 6 <leading_master> ./hello_world
     I0209 02:54:30.842380 17588 sched.cpp:218] No credentials provided. Attempting to register without authentication
