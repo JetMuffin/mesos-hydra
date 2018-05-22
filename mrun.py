@@ -27,13 +27,14 @@ def startMPIExec(procs, slaves, program):
   os.chdir(work_dir)
 
   hosts = ",".join(slaves)
-  cmd = ["./export/bin/mpiexec.hydra", "-genv", "LD_LIBRARY_PATH", work_dir + "/libs", "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts)]
+  cmd = ["./export/bin/mpiexec.hydra", "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts)]
   cmd.extend(program)
-  p = Popen(cmd, stdout=PIPE)
+  p = Popen(cmd, stdout=PIPE, env={"LD_LIBRARY_PATH": work_dir+"/export/libs"})
 
   proxy_args = []
   while True:
     line = p.stdout.readline()
+    print line
     if line == 'HYDRA_LAUNCH_END\n':
       break
     proxy_args.append(line)
@@ -201,10 +202,16 @@ if __name__ == "__main__":
   parser.add_option("--name",
                     help="framework name", dest="name", type="string")
   parser.add_option("--nfs",
-                    help="NFS path", dest="nfs_path", type="string")
+                    help="nfs path", dest="nfs_path", type="string", default=os.environ['NFS_PATH'])
   parser.add_option("-p","--path",
                     help="path to look for MPICH2 binaries (mpiexec)",
                     dest="path", type="string", default="")
+  parser.add_option("-C", "--credential",
+                    help="secret of mesos principle", dest="credential", type="string")
+  parser.add_option("-P", "--principal",
+                    help="mesos principal", dest="principal", type="string")
+  parser.add_option("-G", "--enable_gpu",
+		    help="use gpu resource", dest="enable_gpu")
   parser.add_option("-v", action="store_true", dest="verbose")
 
   # Add options to configure cpus and mem.
@@ -213,7 +220,6 @@ if __name__ == "__main__":
     print >> sys.stderr, "At least two parameters required."
     print >> sys.stderr, "Use --help to show usage."
     exit(2)
-
 
   if options.verbose == True:
     logging.basicConfig(level=logging.INFO)
@@ -225,13 +231,11 @@ if __name__ == "__main__":
   cores_per_node = procs_per_node * cores
   mem_per_node = options.mem
   mpi_program = args[1:]
-  
+
   nfs_path = options.nfs_path
   if nfs_path == None:
-    nfs_path = os.environ.get("NFS_PATH")
-    if nfs_path == None:
-      print >> sys.stderr, "NFS path required."
-      exit(2)
+    print >> sys.stderr, "NFS path required."
+    exit(2)
 
   logging.info("Connecting to Mesos master %s" % args[0])
   logging.info("Total processes %d" % total_procs)
@@ -244,16 +248,33 @@ if __name__ == "__main__":
   framework = mesos_pb2.FrameworkInfo()
   framework.user = ""
 
+  if options.enable_gpu:
+    role1 = framework.capabilities.add()
+    role1.type = framework.Capability.GPU_RESOURCES 
+
   if options.name is not None:
     framework.name = options.name
   else:
     framework.name = "MPICH2 Hydra : %s" % mpi_program[0]
+
+  if options.principal and options.credential:
+    framework.principal = options.principal
+    credential = mesos_pb2.Credential()
+    credential.principal = options.principal
+    credential.secret = options.credential
+    driver = mesos.native.MesosSchedulerDriver(
+        scheduler,
+        framework,
+        args[0],
+        0,
+        credential
+    )
+  else:
+    driver = mesos.native.MesosSchedulerDriver(
+        scheduler,
+        framework,
+        args[0])
   
   work_dir = tempfile.mkdtemp()
-
-  driver = mesos.native.MesosSchedulerDriver(
-    scheduler,
-    framework,
-    args[0])
 
   sys.exit(0 if driver.run() == mesos_pb2.DRIVER_STOPPED else 1)
