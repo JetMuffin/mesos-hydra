@@ -25,13 +25,10 @@ def print_output(p):
 
 
 def start_mpi_exec(procs, slaves, program):
-    os.symlink(os.getcwd() + '/export', work_dir + "/export")
-    os.chdir(work_dir)
-
     hosts = ",".join(slaves)
-    cmd = ["./export/bin/mpiexec.hydra", "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts)]
+    cmd = ["./bin/mpiexec.hydra", "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts)]
     cmd.extend(program)
-    p = Popen(cmd, stdout=PIPE, env={"LD_LIBRARY_PATH": work_dir+"/export/libs"})
+    p = Popen(cmd, stdout=PIPE, env={"LD_LIBRARY_PATH": "./libs"})
 
     proxy_args = []
 
@@ -66,7 +63,7 @@ def finalize_slaves(callbacks):
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((chost, cport))
-        request = work_dir + ";" + proxy_arg
+        request = proxy_arg
         s.send(request)
         s.close()
         # TODO(nnielsen): Add retry logic; slave might not be listening yet.
@@ -141,7 +138,7 @@ class HydraScheduler(mesos.interface.Scheduler):
 
             lib = task.command.environment.variables.add()
             lib.name = "LD_LIBRARY_PATH"
-            lib.value = work_dir + "/libs"
+            lib.value = "./libs"
 
             hydra_uri = task.command.uris.add()
             hydra_uri.value = "file://" + nfs_path + "/hydra/hydra.tgz"
@@ -200,8 +197,8 @@ if __name__ == "__main__":
     parser.add_option("--proxy", help="url to proxy binary", dest="proxy", type="string")
     parser.add_option("--name", help="framework name", dest="name", type="string")
     parser.add_option("--nfs", help="nfs path", dest="nfs_path", type="string", default=os.environ['NFS_PATH'])
-    parser.add_option("-p","--path", help="path to look for MPICH2 binaries (mpiexec)",
-                    dest="path", type="string", default="")
+    parser.add_option("-p", "--path", help="path to look for MPICH2 binaries (mpiexec)",
+                      dest="path", type="string", default="")
     parser.add_option("-C", "--credential", help="secret of mesos principle", dest="credential", type="string")
     parser.add_option("-P", "--principal", help="mesos principal", dest="principal", type="string")
     parser.add_option("-G", "--enable_gpu", action="store_true", help="use gpu resource", dest="enable_gpu")
@@ -268,6 +265,4 @@ if __name__ == "__main__":
             framework,
             args[0])
   
-    work_dir = tempfile.mkdtemp()
-
     sys.exit(0 if driver.run() == mesos_pb2.DRIVER_STOPPED else 1)
