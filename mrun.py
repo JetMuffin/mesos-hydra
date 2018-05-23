@@ -20,6 +20,8 @@ from subprocess import *
 
 
 MAX_LINE = 100
+MESOS_MNT_PATH = '/hydra'
+IMAGE = 'registry.njuics.cn/library/centos'
 
 
 def print_output(p):
@@ -29,9 +31,10 @@ def print_output(p):
 
 def start_mpi_exec(procs, slaves, program):
     hosts = ",".join(slaves)
-    cmd = [os.path.join(nfs_path, "bin/mpiexec.hydra"), "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts)]
-    cmd.extend(program)
-    p = Popen(cmd, stdout=PIPE, env={"LD_LIBRARY_PATH": os.path.join(nfs_path, "export/libs")})
+    program = os.path.join(MESOS_MNT_PATH, program)
+    cmd = ["docker", "run", "--rm", "--net", "host", "-v", nfs_path + "/hydra:/hydra", "-e", "LD_LIBRARY_PATH=/hydra/libs", IMAGE,
+		"/hydra/bin/mpiexec.hydra", "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts), program]
+    p = Popen(cmd, stdout=PIPE)
 
     proxy_args = []
 
@@ -67,7 +70,6 @@ def finalize_slaves(callbacks):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((chost, cport))
         request = proxy_arg
-        print request
         s.send(request)
         s.close()
         # TODO(nnielsen): Add retry logic; slave might not be listening yet.
@@ -140,16 +142,27 @@ class HydraScheduler(mesos.interface.Scheduler):
                 r.begin = port
                 r.end = port
 
+                task.container.type = task.container.DOCKER
+                task.container.docker.image = IMAGE
+                task.container.docker.network = task.container.docker.HOST
+
+    #            portmapping = task.container.docker.port_mappings.add()
+    #            portmapping.host_port = portmapping.container_port = port
+    #            portmapping.protocol = 'tcp'
+
+                volume = task.container.volumes.add()
+                volume.host_path = os.path.join(nfs_path, "hydra")
+                volume.container_path = "/hydra"
+		volume.mode = volume.RW
+
                 lib = task.command.environment.variables.add()
                 lib.name = "LD_LIBRARY_PATH"
-                lib.value = "./libs"
+                lib.value = "/hydra/libs"
 
-                hydra_uri = task.command.uris.add()
-                hydra_uri.value = "file://" + nfs_path + "/hydra/hydra.tgz"
                 executable_uri = task.command.uris.add()
-                executable_uri.value = "file://" + nfs_path + "/hydra/" + mpi_program[0]
+                executable_uri.value = "file://" + nfs_path + "/hydra/" + mpi_program
 
-                task.command.value = "python hydra-proxy.py %d" % port
+                task.command.value = "python /hydra/hydra-proxy.py %d" % port
 
                 tasks.append(task)
 
@@ -208,6 +221,8 @@ if __name__ == "__main__":
     parser.add_option("-G", "--enable_gpu", action="store_true", help="use gpu resource", dest="enable_gpu")
     parser.add_option("-v", action="store_true", dest="verbose")
 
+    work_dir = os.path.dirname(os.path.realpath(__file__))
+
     # Add options to configure cpus and mem.
     (options, args) = parser.parse_args()
     if len(args) < 2:
@@ -224,7 +239,7 @@ if __name__ == "__main__":
     procs_per_node = math.ceil(total_procs / total_nodes)
     cores_per_node = procs_per_node * cores
     mem_per_node = options.mem
-    mpi_program = args[1:]
+    mpi_program = args[1]
 
     nfs_path = options.nfs_path
     if not nfs_path:
@@ -249,7 +264,7 @@ if __name__ == "__main__":
     if options.name is not None:
         framework.name = options.name
     else:
-        framework.name = "MPICH2 Hydra : %s" % mpi_program[0]
+        framework.name = "MPICH2 Hydra : %s" % mpi_program
 
     if options.principal and options.credential:
         framework.principal = options.principal

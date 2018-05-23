@@ -25,6 +25,7 @@ if __name__ == "__main__":
     conn.close()
 
     print "LD_LIBRARY_PATH: " + os.environ.get("LD_LIBRARY_PATH")
+    print "Current directory: " + os.path.dirname(os.path.realpath(__file__))
  
     # Takes hydra proxy launch command and gather parameters
     # Example: HYDRA_LAUNCH: /usr/local/bin/hydra_pmi_proxy --control-port caph:62821 --rmk user --launcher manual
@@ -33,7 +34,7 @@ if __name__ == "__main__":
     if m is not None:
         args = m.group(1)
         argv = args.split()
-        cmd = ["./bin/hydra_pmi_proxy"]
+        cmd = ["/hydra/bin/hydra_pmi_proxy"]
         cmd.extend(argv)
         print "Execute: " + str(cmd)
   

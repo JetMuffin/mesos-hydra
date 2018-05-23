@@ -7,7 +7,6 @@ download_egg:
 
 upload: package example
 	rm -rf $(NFS_PATH)/hydra
-	mkdir -p $(NFS_PATH)/hydra
 	cp -r export $(NFS_PATH)/hydra
 	cp hydra.tgz $(NFS_PATH)/hydra/hydra.tgz
 	cp hello_world $(NFS_PATH)/hydra/hello_world
@@ -16,5 +15,5 @@ package:
 	cd export && tar -cvzf ../hydra.tgz *
 
 example: hello_world.cpp
-	mpicc -o hello_world -g -O2 hello_world.cpp
+	mpicc -o hello_world -g -O2 -I /opt/mpich/include -L /opt/mpich/lib hello_world.cpp
 	
