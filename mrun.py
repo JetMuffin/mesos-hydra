@@ -19,6 +19,9 @@ from optparse import OptionParser
 from subprocess import *
 
 
+MAX_LINE = 100
+
+
 def print_output(p):
     for line in p.stdout:
         print line
@@ -26,13 +29,13 @@ def print_output(p):
 
 def start_mpi_exec(procs, slaves, program):
     hosts = ",".join(slaves)
-    cmd = ["./bin/mpiexec.hydra", "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts)]
+    cmd = [os.path.join(nfs_path, "bin/mpiexec.hydra"), "-launcher", "manual", "-n", str(procs), "-hosts", str(hosts)]
     cmd.extend(program)
-    p = Popen(cmd, stdout=PIPE, env={"LD_LIBRARY_PATH": "./libs"})
+    p = Popen(cmd, stdout=PIPE, env={"LD_LIBRARY_PATH": os.path.join(nfs_path, "export/libs")})
 
     proxy_args = []
 
-    while True:
+    for i in range(MAX_LINE):
         line = p.stdout.readline()
         print line
         if line == 'HYDRA_LAUNCH_END\n':
@@ -64,6 +67,7 @@ def finalize_slaves(callbacks):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((chost, cport))
         request = proxy_arg
+        print request
         s.send(request)
         s.close()
         # TODO(nnielsen): Add retry logic; slave might not be listening yet.
@@ -91,71 +95,71 @@ class HydraScheduler(mesos.interface.Scheduler):
                 driver.declineOffer(offer.id)
                 continue
 
-        cpus = 0
-        mem = 0
-        tasks = []
+            cpus = 0
+            mem = 0
+            tasks = []
 
-        if offer.hostname in self.slaves:
-            logging.info("Declining offer: offer from slave already scheduled")
+            if offer.hostname in self.slaves:
+                logging.info("Declining offer: offer from slave already scheduled")
 
-        for resource in offer.resources:
-            if resource.name == "cpus":
-                cpus = resource.scalar.value
-            elif resource.name == "mem":
-                mem = resource.scalar.value
-            elif resource.name == "ports":
-                port = resource.ranges.range[0].begin
+            for resource in offer.resources:
+                if resource.name == "cpus":
+                    cpus = resource.scalar.value
+                elif resource.name == "mem":
+                    mem = resource.scalar.value
+                elif resource.name == "ports":
+                    port = resource.ranges.range[0].begin
 
-        if cpus < cores_per_node or mem < mem_per_node:
-            logging.info("Declining offer due to too few resources")
-            driver.declineOffer(offer.id)
-        else:
-            tid = self.proxiesLaunched
-            self.proxiesLaunched += 1
+            if cpus < cores_per_node or mem < mem_per_node:
+                logging.info("Declining offer due to too few resources")
+                driver.declineOffer(offer.id)
+            else:
+                tid = self.proxiesLaunched
+                self.proxiesLaunched += 1
 
-            logging.info("Launching proxy on offer %s from %s" % (offer.id, offer.hostname))
-            task = mesos_pb2.TaskInfo()
-            task.task_id.value = str(tid)
-            task.slave_id.value = offer.slave_id.value
-            task.name = "task %d " % tid
+                logging.info("Launching proxy on offer %s from %s" % (offer.id, offer.hostname))
+                task = mesos_pb2.TaskInfo()
+                task.task_id.value = str(tid)
+                task.slave_id.value = offer.slave_id.value
+                task.name = "task %d " % tid
 
-            cpus = task.resources.add()
-            cpus.name = "cpus"
-            cpus.type = mesos_pb2.Value.SCALAR
-            cpus.scalar.value = cores_per_node
+                cpus = task.resources.add()
+                cpus.name = "cpus"
+                cpus.type = mesos_pb2.Value.SCALAR
+                cpus.scalar.value = cores_per_node
 
-            mem = task.resources.add()
-            mem.name = "mem"
-            mem.type = mesos_pb2.Value.SCALAR
-            mem.scalar.value = mem_per_node
+                mem = task.resources.add()
+                mem.name = "mem"
+                mem.type = mesos_pb2.Value.SCALAR
+                mem.scalar.value = mem_per_node
 
-            ports = task.resources.add()
-            ports.name = "ports"
-            ports.type = mesos_pb2.Value.RANGES
-            r = ports.ranges.range.add()
-            r.begin = port
-            r.end = port
+                ports = task.resources.add()
+                ports.name = "ports"
+                ports.type = mesos_pb2.Value.RANGES
+                r = ports.ranges.range.add()
+                r.begin = port
+                r.end = port
 
-            lib = task.command.environment.variables.add()
-            lib.name = "LD_LIBRARY_PATH"
-            lib.value = "./libs"
+                lib = task.command.environment.variables.add()
+                lib.name = "LD_LIBRARY_PATH"
+                lib.value = "./libs"
 
-            hydra_uri = task.command.uris.add()
-            hydra_uri.value = "file://" + nfs_path + "/hydra/hydra.tgz"
-            executable_uri = task.command.uris.add()
-            executable_uri.value = "file://" + nfs_path + "/hydra/" + mpi_program[0]
+                hydra_uri = task.command.uris.add()
+                hydra_uri.value = "file://" + nfs_path + "/hydra/hydra.tgz"
+                executable_uri = task.command.uris.add()
+                executable_uri.value = "file://" + nfs_path + "/hydra/" + mpi_program[0]
 
-            task.command.value = "python hydra-proxy.py %d" % port
+                task.command.value = "python hydra-proxy.py %d" % port
 
-            tasks.append(task)
+                tasks.append(task)
 
-            logging.info("Replying to offer: launching proxy %d on host %s" % (tid, offer.hostname))
-            logging.info("Call-back at %s:%d" % (offer.hostname, port))
+                logging.info("Replying to offer: launching proxy %d on host %s" % (tid, offer.hostname))
+                logging.info("Call-back at %s:%d" % (offer.hostname, port))
 
-            self.callbacks.append([offer.hostname, port])
-            self.slaves.add(offer.hostname)
+                self.callbacks.append([offer.hostname, port])
+                self.slaves.add(offer.hostname)
 
-            driver.launchTasks(offer.id, tasks)
+                driver.launchTasks(offer.id, tasks)
 
     def statusUpdate(self, driver, update):
         if update.state == mesos_pb2.TASK_FAILED \
@@ -170,7 +174,7 @@ class HydraScheduler(mesos.interface.Scheduler):
             # Trigger real launch when threshold is met.
             if self.proxiesRunning >= total_nodes and not self.finalizeTriggered:
                 self.finalizeTriggered = True
-                threading.Thread(target = finalize_slaves, args = ([self.callbacks])).start()
+                threading.Thread(target=finalize_slaves, args=([self.callbacks])).start()
 
         if update.state == mesos_pb2.TASK_FINISHED:
             self.proxiesFinished += 1
@@ -205,7 +209,7 @@ if __name__ == "__main__":
     parser.add_option("-v", action="store_true", dest="verbose")
 
     # Add options to configure cpus and mem.
-    (options,args) = parser.parse_args()
+    (options, args) = parser.parse_args()
     if len(args) < 2:
         print >> sys.stderr, "At least two parameters required."
         print >> sys.stderr, "Use --help to show usage."
@@ -223,7 +227,7 @@ if __name__ == "__main__":
     mpi_program = args[1:]
 
     nfs_path = options.nfs_path
-    if nfs_path == None:
+    if not nfs_path:
         print >> sys.stderr, "NFS path required."
         exit(2)
 
@@ -264,5 +268,5 @@ if __name__ == "__main__":
             scheduler,
             framework,
             args[0])
-  
+
     sys.exit(0 if driver.run() == mesos_pb2.DRIVER_STOPPED else 1)
