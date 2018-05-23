@@ -210,8 +210,7 @@ if __name__ == "__main__":
                     help="secret of mesos principle", dest="credential", type="string")
   parser.add_option("-P", "--principal",
                     help="mesos principal", dest="principal", type="string")
-  parser.add_option("-G", "--enable_gpu",
-		    help="use gpu resource", dest="enable_gpu")
+  parser.add_option("-G", "--enable_gpu", action="store_true", help="use gpu resource", dest="enable_gpu")
   parser.add_option("-v", action="store_true", dest="verbose")
 
   # Add options to configure cpus and mem.
